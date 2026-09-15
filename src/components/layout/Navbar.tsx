@@ -17,6 +17,7 @@ import { useAuth, useUser, useFirestore, useDoc, useMemoFirebase } from '@/fireb
 import { signOut } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { doc } from 'firebase/firestore';
+import { triggerFullPageTranslation } from '@/lib/page-translator';
 
 const LANGUAGES = [
   { code: 'en', label: 'English' },
@@ -56,11 +57,7 @@ export function Navbar() {
 
   const switchLanguage = (langCode: string) => {
     setLang(langCode);
-    const selectElement = document.querySelector('.goog-te-combo') as HTMLSelectElement;
-    if (selectElement) {
-      selectElement.value = langCode;
-      selectElement.dispatchEvent(new Event('change'));
-    }
+    triggerFullPageTranslation(langCode);
   };
 
   const displayName = profile?.name || user?.displayName || user?.email?.split('@')[0] || 'User';
