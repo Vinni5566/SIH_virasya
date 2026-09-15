@@ -27,8 +27,8 @@ export default function RootLayout({
           <Toaster />
         </FirebaseClientProvider>
 
-        {/* Google Translate Hidden Element */}
-        <div id="google_translate_element" style={{ display: 'none' }}></div>
+        {/* Google Translate Element (visually hidden offscreen so select combo initializes reliably) */}
+        <div id="google_translate_element" style={{ position: 'absolute', left: '-9999px', top: '-9999px', width: '1px', height: '1px', overflow: 'hidden' }}></div>
 
         {/* Google Translate Initialization Script */}
         <Script id="google-translate-init" strategy="afterInteractive">

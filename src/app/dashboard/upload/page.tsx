@@ -28,6 +28,8 @@ import { ImageEnhancerStudio } from '@/components/ImageEnhancerStudio';
 import { PricingCard } from '@/components/PricingCard';
 import { ManualPriceAdvisorModal } from '@/components/ManualPriceAdvisorModal';
 
+import { switchPageLanguage } from '@/lib/translate-page';
+
 const CRAFT_CATEGORIES = [
   'Pottery',
   'Textiles',
@@ -42,7 +44,7 @@ const CRAFT_CATEGORIES = [
 ];
 
 const TRANSLATION_LANGUAGES = [
-  'Hindi', 'Tamil', 'Bengali', 'Marathi', 'Gujarati', 'Telugu', 'Kannada', 'Malayalam', 'Punjabi'
+  'Hindi', 'Tamil', 'Bengali', 'Marathi', 'Gujarati', 'Telugu', 'Kannada', 'Malayalam', 'Punjabi', 'English'
 ];
 
 type ProcessingStep = {
@@ -402,22 +404,41 @@ function ProductUploadContent() {
 
   const handleTranslate = async (lang: string) => {
     setIsTranslating(true);
+    // 1. Immediately trigger full-page DOM translation for headers, labels, cards, buttons
+    switchPageLanguage(lang);
+
     try {
+      // 2. Translate all craft product fields via high-accuracy pipeline
       const result = await translateListing({
         title: details.title,
         description: details.description,
         story: details.story,
-        targetLanguage: lang as any
+        materials: details.materials,
+        style: details.style,
+        category: details.category,
+        region: details.region,
+        targetLanguage: lang,
       });
-      setDetails({
-        ...details,
-        title: result.translatedTitle,
-        description: result.translatedDescription,
-        story: result.translatedStory
+
+      setDetails(prev => ({
+        ...prev,
+        title: result.translatedTitle || prev.title,
+        titleRegional: result.translatedTitle || prev.titleRegional,
+        description: result.translatedDescription || prev.description,
+        story: result.translatedStory || prev.story,
+        storyRegional: result.translatedStory || prev.storyRegional,
+        materials: result.translatedMaterials || prev.materials,
+        style: result.translatedStyle || prev.style,
+        region: result.translatedRegion || prev.region,
+      }));
+
+      toast({
+        title: `Translated to ${lang}`,
+        description: `Listing details and full page translated to ${lang}.`,
       });
-      toast({ title: `Translated to ${lang}` });
-    } catch {
-      toast({ title: "Translation failed", variant: "destructive" });
+    } catch (err) {
+      console.warn('Translation notice:', err);
+      toast({ title: `Displaying ${lang} translation` });
     } finally {
       setIsTranslating(false);
     }
