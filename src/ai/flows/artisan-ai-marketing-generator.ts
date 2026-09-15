@@ -52,7 +52,34 @@ const marketingGeneratorFlow = ai.defineFlow(
     outputSchema: MarketingOutputSchema,
   },
   async input => {
-    const {output} = await marketingPrompt(input);
-    return output!;
+    try {
+      const { output } = await marketingPrompt(input);
+      if (output) return output;
+    } catch (err: any) {
+      console.warn('Marketing AI prompt failed, using template fallback:', err?.message || err);
+    }
+    // Template fallback — never crashes, always returns valid marketing content
+    const craft = input.craftType || 'handcraft';
+    const region = input.region || 'India';
+    const name = input.productName || 'Artisan Piece';
+    const regionSlug = region.split(',')[0].trim().replace(/\s+/g, '');
+    const craftSlug = craft.replace(/\s+/g, '');
+    return {
+      instagram: `✨ Meet *${name}* — a stunning ${craft} from ${region}! 🇮🇳 Every stitch, every curve carries centuries of heritage. Now available on Virasya. Shop authentic India. 🛍️`,
+      whatsapp: `🎨 *Introducing: ${name}*\n\nThis exquisite piece of ${craft} from ${region} is a living tribute to India's rich artisan heritage. Crafted by master artisans using time-honoured techniques passed down through generations, each piece is one-of-a-kind.\n\n✅ 100% Authentic & Handmade\n✅ Directly from the artisan\n✅ Fair-trade pricing\n\n🛍️ Explore & purchase on *Virasya* — India's trusted platform for authentic handcrafted art.\n\n📦 Fast delivery | 🔒 Secure payment`,
+      hashtags: [
+        '#HandmadeInIndia',
+        '#IndianCraft',
+        '#Virasya',
+        '#ArtisanMade',
+        '#HeritageArt',
+        `#${craftSlug}`,
+        `#${regionSlug}Craft`,
+        '#SupportArtisans',
+        '#EthicalLiving',
+        '#AuthenticIndia',
+      ],
+      promoLine: `Own a piece of India's living heritage — ${name}.`,
+    };
   }
 );
