@@ -74,7 +74,15 @@ const artisanAiCraftStoryGeneratorFlow = ai.defineFlow(
     outputSchema: ArtisanAiCraftStoryGeneratorOutputSchema,
   },
   async input => {
-    const {output} = await artisanCraftStoryPrompt(input);
-    return output!;
+    try {
+      const {output} = await artisanCraftStoryPrompt(input);
+      if (output) return output;
+    } catch (err: any) {
+      console.warn('Story generator AI failed, using template fallback:', err?.message || err);
+    }
+    // Template fallback — strictly fact-based, no hallucination
+    return {
+      story: `${input.productName} is a remarkable example of ${input.craftTradition} from ${input.region}, crafted with ${input.materials} by an artisan with ${input.yearsOfExperience} years of dedicated practice. Using the ${input.specialTechnique} technique, this piece embodies the living heritage and patient devotion that defines authentic Indian handicraft traditions. Every detail reflects the artisan's commitment to preserving cultural authenticity while creating something truly unique.`,
+    };
   }
 );
