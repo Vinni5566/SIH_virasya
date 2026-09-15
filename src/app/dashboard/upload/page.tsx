@@ -107,6 +107,7 @@ function ProductUploadContent() {
     style: string;
     category: string;
     region: string;
+    dimensions: string;
   } | null>(null);
 
   /**
@@ -185,6 +186,7 @@ function ProductUploadContent() {
             style: data.craftStyle || '',
             category: data.craftType || '',
             region: data.region || 'Rajasthan, India',
+            dimensions: data.dimensions || '',
           };
           if (data.images && data.images.length > 0) {
             setImages(data.images);
@@ -350,6 +352,7 @@ function ProductUploadContent() {
         style: result.craftStyle,
         category: result.craftType || '',
         region: details.region,
+        dimensions: result.dimensions || '',
       };
 
       // Check if missing details were flagged
@@ -433,6 +436,7 @@ function ProductUploadContent() {
         style: craftStyle,
         category: craftCategory,
         region: details.region,
+        dimensions,
       };
 
       toast({
@@ -478,6 +482,7 @@ function ProductUploadContent() {
   const handleTranslate = async (lang: string) => {
     setIsTranslating(true);
     setActiveTranslatingLang(lang);
+    const previousLang = activeLangRef.current;
     activeLangRef.current = lang;
     const langCode = LANG_CODE_MAP[lang] || 'hi';
 
@@ -494,6 +499,7 @@ function ProductUploadContent() {
           materials: eng.materials,
           style: eng.style,
           region: eng.region,
+          dimensions: eng.dimensions,
         }));
       }
       setIsTranslating(false);
@@ -521,11 +527,16 @@ function ProductUploadContent() {
           style: details.style,
           category: details.category,
           region: details.region,
+          dimensions: details.dimensions,
         };
-      } else if (activeLangRef.current === 'English') {
-        if (!originalEnglishRef.current.story && details.story) originalEnglishRef.current.story = details.story;
-        if (!originalEnglishRef.current.description && details.description) originalEnglishRef.current.description = details.description;
-        if (!originalEnglishRef.current.title && details.title) originalEnglishRef.current.title = details.title;
+      } else if (previousLang === 'English') {
+        if (details.story) originalEnglishRef.current.story = details.story;
+        if (details.description) originalEnglishRef.current.description = details.description;
+        if (details.title) originalEnglishRef.current.title = details.title;
+        if (details.materials) originalEnglishRef.current.materials = details.materials;
+        if (details.style) originalEnglishRef.current.style = details.style;
+        if (details.region) originalEnglishRef.current.region = details.region;
+        if (details.dimensions) originalEnglishRef.current.dimensions = details.dimensions;
       }
 
       const english = originalEnglishRef.current;
@@ -536,6 +547,7 @@ function ProductUploadContent() {
       const styleToTranslate = english.style || details.style;
       const categoryToTranslate = english.category || details.category;
       const regionToTranslate = english.region || details.region;
+      const dimensionsToTranslate = english.dimensions || details.dimensions;
 
       const result = await translateListing({
         title: titleToTranslate,
@@ -545,6 +557,7 @@ function ProductUploadContent() {
         style: styleToTranslate,
         category: categoryToTranslate,
         region: regionToTranslate,
+        dimensions: dimensionsToTranslate,
         targetLanguage: lang as any,
       });
 
@@ -556,6 +569,7 @@ function ProductUploadContent() {
         materials: result.translatedMaterials || materialsToTranslate,
         style: result.translatedStyle || styleToTranslate,
         region: result.translatedRegion || regionToTranslate,
+        dimensions: result.translatedDimensions || dimensionsToTranslate,
         titleRegional: result.translatedTitle || prev.titleRegional,
         storyRegional: result.translatedStory || prev.storyRegional,
       }));
@@ -991,6 +1005,9 @@ function ProductUploadContent() {
 
                       if (detail.field === 'dimensions') {
                         setDetails(prev => ({ ...prev, dimensions: e.target.value }));
+                        if (activeLangRef.current === 'English' && originalEnglishRef.current) {
+                          originalEnglishRef.current.dimensions = e.target.value;
+                        }
                       }
                     }}
                     placeholder={detail.suggestedValue || `Enter ${detail.label.toLowerCase()}...`}
@@ -1166,7 +1183,13 @@ function ProductUploadContent() {
                     <Label>Dimensions / Size</Label>
                     <Input
                       value={details.dimensions}
-                      onChange={e => setDetails(prev => ({ ...prev, dimensions: e.target.value }))}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setDetails(prev => ({ ...prev, dimensions: val }));
+                        if (activeLangRef.current === 'English' && originalEnglishRef.current) {
+                          originalEnglishRef.current.dimensions = val;
+                        }
+                      }}
                       placeholder="e.g. 12 x 8 inches"
                       className="rounded-xl h-12"
                     />
