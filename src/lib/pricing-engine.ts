@@ -567,13 +567,29 @@ export function generateInterpretableReasoning(
 }
 
 // ============================================================================
-// 6. PIPELINE ORCHESTRATOR
-// ============================================================================
+// Minimum comparable listings needed to form a confident statistical distribution
+const MINIMUM_COMPARABLE_LISTINGS = 4;
+// Adaptive relevance threshold: filters out irrelevant non-craft items while keeping authentic craft listings
+// Hard exclusion already filters out chisels, saws, raw lumber, lathes, etc.
+const RELEVANCE_THRESHOLD = 3;
 
-const MINIMUM_COMPARABLE_LISTINGS = 5;
-// Raised from 4 → 6 so that listings must match craft + material + title keywords
-// to pass through. Score 4 was letting tools (chisel, comb) pass via craft-word alone.
-const RELEVANCE_THRESHOLD = 6;
+function parseNumericPrice(item: RawShoppingItem): number | null {
+  if (typeof item.extracted_price === 'number' && Number.isFinite(item.extracted_price) && item.extracted_price > 0) {
+    return item.extracted_price;
+  }
+  if (typeof item.price === 'string') {
+    const cleanStr = item.price.replace(/,/g, '');
+    const match = cleanStr.match(/(?:₹|Rs\.?|INR|\$)?\s*(\d+(?:\.\d+)?)/i);
+    if (match) {
+      let val = parseFloat(match[1]);
+      if (item.price.includes('$')) {
+        val = Math.round(val * 85); // Convert USD to INR
+      }
+      if (Number.isFinite(val) && val > 0) return val;
+    }
+  }
+  return null;
+}
 
 export function processMarketListings(
   rawResults: RawShoppingItem[],
@@ -581,17 +597,17 @@ export function processMarketListings(
   queryUsed: string
 ): PricingEngineResponse {
   // Step 1: Filter raw results with valid numeric prices
-  const pricedItems: RawShoppingItem[] = [];
+  const pricedItems: Array<{ item: RawShoppingItem; numericPrice: number }> = [];
   for (const item of rawResults) {
-    const priceNum = item.extracted_price;
-    if (typeof priceNum === 'number' && Number.isFinite(priceNum) && priceNum > 0) {
-      pricedItems.push(item);
+    const priceNum = parseNumericPrice(item);
+    if (priceNum !== null) {
+      pricedItems.push({ item, numericPrice: priceNum });
     }
   }
 
   // Step 2: Hard exclusion + Relevance scoring (BEFORE IQR)
   const comparableListings: ComparableListing[] = [];
-  for (const item of pricedItems) {
+  for (const { item, numericPrice } of pricedItems) {
     const title = item.title || '';
     // Hard exclusion: reject tools, raw materials, accessories for this craft type
     if (isHardExcluded(title, input.craftType || '')) continue;
@@ -599,8 +615,8 @@ export function processMarketListings(
     if (score >= RELEVANCE_THRESHOLD) {
       comparableListings.push({
         title,
-        price: item.price || `₹${item.extracted_price}`,
-        extractedPrice: item.extracted_price!,
+        price: item.price || `₹${numericPrice.toLocaleString('en-IN')}`,
+        extractedPrice: numericPrice,
         source: item.source || 'Online Marketplace',
         link: item.link || '',
         thumbnail: item.thumbnail || '',
