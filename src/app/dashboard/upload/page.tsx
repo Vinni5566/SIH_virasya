@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect, Suspense } from 'react';
-import { 
-  Camera, Sparkles, Check, Image as ImageIcon, Loader2, 
-  RefreshCw, Globe, ArrowRight, ArrowLeft, Megaphone, 
+import {
+  Camera, Sparkles, Check, Image as ImageIcon, Loader2,
+  RefreshCw, Globe, ArrowRight, ArrowLeft, Megaphone,
   Trash2, Plus, Sliders, Volume2, HelpCircle, Layers, CheckCircle2
 } from 'lucide-react';
 import { Navbar } from '@/components/layout/Navbar';
@@ -29,15 +29,15 @@ import { PricingCard } from '@/components/PricingCard';
 import { ManualPriceAdvisorModal } from '@/components/ManualPriceAdvisorModal';
 
 const CRAFT_CATEGORIES = [
-  'Pottery', 
-  'Textiles', 
-  'Jewelry', 
-  'Woodwork', 
-  'Hand painting', 
-  'Paper Mache', 
-  'Metalwork', 
-  'Leatherwork', 
-  'Bamboo & Cane', 
+  'Pottery',
+  'Textiles',
+  'Jewelry',
+  'Woodwork',
+  'Hand painting',
+  'Paper Mache',
+  'Metalwork',
+  'Leatherwork',
+  'Bamboo & Cane',
   'Other'
 ];
 
@@ -66,8 +66,8 @@ function ProductUploadContent() {
   // 4: Missing Details Verification
   // 5: Final Review & Polish
   // 6: Final Preview
-  const [step, setStep] = useState(1); 
-  
+  const [step, setStep] = useState(1);
+
   // Image handling (multiple images)
   const [images, setImages] = useState<string[]>([]);
   const [primaryImageIndex, setPrimaryImageIndex] = useState(0);
@@ -89,7 +89,7 @@ function ProductUploadContent() {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingDraft, setIsLoadingDraft] = useState(false);
   const [isManualPricingModalOpen, setIsManualPricingModalOpen] = useState(false);
-  
+
   const { toast } = useToast();
   const db = useFirestore();
   const { user } = useUser();
@@ -271,7 +271,7 @@ function ProductUploadContent() {
       // Step simulation for visual feedback
       for (let i = 0; i < processingSteps.length; i++) {
         setProcessingSteps(prev => prev.map(s => s.id === i + 1 ? { ...s, status: 'loading' } : s));
-        await new Promise(r => setTimeout(r, 450)); 
+        await new Promise(r => setTimeout(r, 450));
         setProcessingSteps(prev => prev.map(s => s.id === i + 1 ? { ...s, status: 'complete' } : s));
       }
 
@@ -443,10 +443,10 @@ function ProductUploadContent() {
 
   const handleSave = async (status: 'Draft' | 'Published') => {
     if (!user) {
-      toast({ 
-        title: "Authentication Required", 
+      toast({
+        title: "Authentication Required",
         description: "Please log in to save your crafts.",
-        variant: "destructive" 
+        variant: "destructive"
       });
       router.push('/auth');
       return;
@@ -490,21 +490,21 @@ function ProductUploadContent() {
         const productsRef = collection(db, 'products');
         addDocumentNonBlocking(productsRef, productData);
       }
-      
-      toast({ 
-        title: status === 'Published' ? "Product Published!" : "Draft Saved!", 
+
+      toast({
+        title: status === 'Published' ? "Product Published!" : "Draft Saved!",
         description: status === 'Published' ? "Your craft is now live on the marketplace." : "You can find your draft in the hub."
       });
-      
+
       setTimeout(() => {
         router.push('/dashboard');
       }, 1500);
     } catch {
       setIsSaving(false);
-      toast({ 
-        title: "Save failed", 
+      toast({
+        title: "Save failed",
         description: "An error occurred while saving. Please check your connection.",
-        variant: "destructive" 
+        variant: "destructive"
       });
     }
   };
@@ -524,14 +524,13 @@ function ProductUploadContent() {
         {/* Progress Dots / Bar */}
         <div className="flex items-center gap-2 mb-4">
           {[1, 2, 3, 4, 5, 6].map(i => (
-            <button 
+            <button
               key={i}
               type="button"
               onClick={() => setStep(i)}
               title={`Jump to Step ${i}`}
-              className={`h-2 flex-1 rounded-full transition-all duration-300 hover:opacity-80 cursor-pointer ${
-                step >= i ? 'bg-primary' : 'bg-secondary'
-              }`} 
+              className={`h-2 flex-1 rounded-full transition-all duration-300 hover:opacity-80 cursor-pointer ${step >= i ? 'bg-primary' : 'bg-secondary'
+                }`}
             />
           ))}
         </div>
@@ -565,7 +564,7 @@ function ProductUploadContent() {
       {step === 1 && (
         <div className="space-y-8 animate-in fade-in-50 duration-200">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            
+
             {/* Left Column: Image Gallery Upload */}
             <div className="lg:col-span-6 space-y-4">
               <div className="bg-white p-6 rounded-[32px] border border-border/60 shadow-sm space-y-4">
@@ -622,11 +621,10 @@ function ProductUploadContent() {
                       <div
                         key={idx}
                         onClick={() => setPrimaryImageIndex(idx)}
-                        className={`relative w-16 h-16 rounded-xl overflow-hidden cursor-pointer border-2 transition-all ${
-                          idx === primaryImageIndex
+                        className={`relative w-16 h-16 rounded-xl overflow-hidden cursor-pointer border-2 transition-all ${idx === primaryImageIndex
                             ? 'border-primary ring-2 ring-primary/20 scale-105 shadow-sm'
                             : 'border-border/60 opacity-70 hover:opacity-100'
-                        }`}
+                          }`}
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={img} alt={`Thumb ${idx}`} className="w-full h-full object-cover" />
@@ -708,7 +706,7 @@ function ProductUploadContent() {
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Sparkles className="h-4 w-4 text-primary" />
               <span>
-                {images.length > 0 
+                {images.length > 0
                   ? `${images.length} photo(s) ready for studio enhancement & auto-cataloging.`
                   : 'Please upload at least 1 photo to proceed.'}
               </span>
@@ -785,15 +783,14 @@ function ProductUploadContent() {
           </div>
 
           {processingSteps.map(s => (
-            <div 
-              key={s.id} 
-              className={`flex items-center justify-between p-4 rounded-2xl bg-white border transition-all duration-300 ${
-                s.status === 'complete' 
-                  ? 'border-primary/20 opacity-100 shadow-sm' 
-                  : s.status === 'loading' 
-                  ? 'border-primary/50 opacity-100 ring-2 ring-primary/10' 
-                  : 'opacity-40'
-              }`}
+            <div
+              key={s.id}
+              className={`flex items-center justify-between p-4 rounded-2xl bg-white border transition-all duration-300 ${s.status === 'complete'
+                  ? 'border-primary/20 opacity-100 shadow-sm'
+                  : s.status === 'loading'
+                    ? 'border-primary/50 opacity-100 ring-2 ring-primary/10'
+                    : 'opacity-40'
+                }`}
             >
               <span className="font-bold text-xs tracking-tight text-foreground">{s.label}</span>
               {s.status === 'loading' && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
@@ -901,9 +898,9 @@ function ProductUploadContent() {
             />
 
             {/* Marketing Generator CTA */}
-            <Button 
-              variant="outline" 
-              className="w-full rounded-full h-12 gap-2 border-2 hover:bg-primary/5" 
+            <Button
+              variant="outline"
+              className="w-full rounded-full h-12 gap-2 border-2 hover:bg-primary/5"
               onClick={handleGenerateMarketing}
               disabled={isMarketingLoading}
             >
@@ -925,12 +922,12 @@ function ProductUploadContent() {
                 </div>
                 <div className="flex flex-wrap gap-2 justify-end max-w-[50%]">
                   {TRANSLATION_LANGUAGES.map(l => (
-                    <Button 
-                      key={l} 
-                      variant="ghost" 
-                      size="sm" 
-                      className="h-7 rounded-full text-[9px] bg-secondary/30 px-2" 
-                      onClick={() => handleTranslate(l)} 
+                    <Button
+                      key={l}
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 rounded-full text-[9px] bg-secondary/30 px-2"
+                      onClick={() => handleTranslate(l)}
                       disabled={isTranslating}
                     >
                       {isTranslating ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Globe className="h-3 w-3 mr-1" />}
@@ -944,15 +941,15 @@ function ProductUploadContent() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <Label>Product Title (English)</Label>
-                    <Input 
-                      value={details.title} 
-                      onChange={e => setDetails({...details, title: e.target.value})} 
-                      className="rounded-xl h-12" 
+                    <Input
+                      value={details.title}
+                      onChange={e => setDetails({ ...details, title: e.target.value })}
+                      className="rounded-xl h-12"
                     />
                   </div>
                   <div className="space-y-2">
                     <Label>Category</Label>
-                    <Select value={details.category} onValueChange={v => setDetails({...details, category: v})}>
+                    <Select value={details.category} onValueChange={v => setDetails({ ...details, category: v })}>
                       <SelectTrigger className="rounded-xl h-12"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {CRAFT_CATEGORIES.map(c => (
@@ -963,63 +960,63 @@ function ProductUploadContent() {
                   </div>
                   <div className="space-y-2">
                     <Label>Materials Used</Label>
-                    <Input 
-                      value={details.materials} 
-                      onChange={e => setDetails({...details, materials: e.target.value})} 
-                      className="rounded-xl h-12" 
+                    <Input
+                      value={details.materials}
+                      onChange={e => setDetails({ ...details, materials: e.target.value })}
+                      className="rounded-xl h-12"
                     />
                   </div>
                   <div className="space-y-2">
                     <Label>Craft Style / Tradition</Label>
-                    <Input 
-                      value={details.style} 
-                      onChange={e => setDetails({...details, style: e.target.value})} 
-                      className="rounded-xl h-12" 
+                    <Input
+                      value={details.style}
+                      onChange={e => setDetails({ ...details, style: e.target.value })}
+                      className="rounded-xl h-12"
                     />
                   </div>
                   <div className="space-y-2">
                     <Label>Dimensions / Size</Label>
-                    <Input 
-                      value={details.dimensions} 
-                      onChange={e => setDetails({...details, dimensions: e.target.value})} 
+                    <Input
+                      value={details.dimensions}
+                      onChange={e => setDetails({ ...details, dimensions: e.target.value })}
                       placeholder="e.g. 12 x 8 inches"
-                      className="rounded-xl h-12" 
+                      className="rounded-xl h-12"
                     />
                   </div>
                   <div className="space-y-2">
                     <Label>Origin Region</Label>
-                    <Input 
-                      value={details.region} 
-                      onChange={e => setDetails({...details, region: e.target.value})} 
-                      className="rounded-xl h-12" 
+                    <Input
+                      value={details.region}
+                      onChange={e => setDetails({ ...details, region: e.target.value })}
+                      className="rounded-xl h-12"
                     />
                   </div>
                   <div className="space-y-2">
                     <Label>Selling Price (INR)</Label>
-                    <Input 
-                      type="number" 
-                      value={details.price} 
-                      onChange={e => setDetails({...details, price: Number(e.target.value)})} 
-                      className="rounded-xl h-12 font-bold text-primary font-sans" 
+                    <Input
+                      type="number"
+                      value={details.price}
+                      onChange={e => setDetails({ ...details, price: Number(e.target.value) })}
+                      className="rounded-xl h-12 font-bold text-primary font-sans"
                     />
                   </div>
                   <div className="space-y-2">
                     <Label>Stock Quantity</Label>
-                    <Input 
-                      type="number" 
-                      value={details.quantity} 
-                      onChange={e => setDetails({...details, quantity: Number(e.target.value)})} 
-                      className="rounded-xl h-12" 
+                    <Input
+                      type="number"
+                      value={details.quantity}
+                      onChange={e => setDetails({ ...details, quantity: Number(e.target.value) })}
+                      className="rounded-xl h-12"
                     />
                   </div>
                 </div>
 
                 <div className="space-y-2">
                   <Label>Short Description</Label>
-                  <Textarea 
-                    value={details.description} 
-                    onChange={e => setDetails({...details, description: e.target.value})} 
-                    className="rounded-xl min-h-[100px] leading-relaxed" 
+                  <Textarea
+                    value={details.description}
+                    onChange={e => setDetails({ ...details, description: e.target.value })}
+                    className="rounded-xl min-h-[100px] leading-relaxed"
                   />
                 </div>
 
@@ -1032,34 +1029,34 @@ function ProductUploadContent() {
                       </span>
                     )}
                   </div>
-                  <Textarea 
-                    value={details.story} 
-                    onChange={e => setDetails({...details, story: e.target.value})} 
-                    className="rounded-xl min-h-[120px] italic text-muted-foreground bg-secondary/10 border-none" 
+                  <Textarea
+                    value={details.story}
+                    onChange={e => setDetails({ ...details, story: e.target.value })}
+                    className="rounded-xl min-h-[120px] italic text-muted-foreground bg-secondary/10 border-none"
                   />
                   <p className="text-[10px] text-primary/60 italic">*Generated based on verified cultural context. Max 4 sentences.</p>
                 </div>
               </div>
 
               <div className="flex flex-col sm:flex-row gap-4 pt-12">
-                <Button 
-                  variant="outline" 
-                  className="rounded-full h-14 border-2 px-6" 
+                <Button
+                  variant="outline"
+                  className="rounded-full h-14 border-2 px-6"
                   onClick={() => setStep(1)}
                 >
                   Start Over
                 </Button>
-                <Button 
-                  variant="secondary" 
-                  className="rounded-full h-14 px-6 font-semibold" 
+                <Button
+                  variant="secondary"
+                  className="rounded-full h-14 px-6 font-semibold"
                   onClick={() => handleSave('Draft')}
                   disabled={isSaving}
                 >
                   {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                   Save Draft
                 </Button>
-                <Button 
-                  className="flex-1 rounded-full h-14 shadow-lg text-lg gap-2" 
+                <Button
+                  className="flex-1 rounded-full h-14 shadow-lg text-lg gap-2"
                   onClick={() => setStep(6)}
                 >
                   Preview Listing <ArrowRight className="h-5 w-5" />
@@ -1125,17 +1122,17 @@ function ProductUploadContent() {
                   <Button variant="outline" className="flex-1 rounded-full h-12" onClick={() => setStep(5)}>
                     Back to Edit
                   </Button>
-                  <Button 
+                  <Button
                     variant="secondary"
-                    className="flex-1 rounded-full h-12 font-semibold" 
-                    onClick={() => handleSave('Draft')} 
+                    className="flex-1 rounded-full h-12 font-semibold"
+                    onClick={() => handleSave('Draft')}
                     disabled={isSaving}
                   >
                     Save as Draft
                   </Button>
-                  <Button 
-                    className="flex-1 rounded-full h-12 shadow-lg" 
-                    onClick={() => handleSave('Published')} 
+                  <Button
+                    className="flex-1 rounded-full h-12 shadow-lg"
+                    onClick={() => handleSave('Published')}
                     disabled={isSaving}
                   >
                     {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
