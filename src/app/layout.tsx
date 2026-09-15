@@ -28,7 +28,7 @@ export default function RootLayout({
         </FirebaseClientProvider>
 
         {/* Google Translate Hidden Element */}
-        <div id="google_translate_element" style={{ display: 'none' }}></div>
+        <div id="google_translate_element" style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', zIndex: -100 }}></div>
 
         {/* Google Translate Initialization Script */}
         <Script id="google-translate-init" strategy="afterInteractive">

@@ -214,10 +214,23 @@ export async function POST(req: NextRequest) {
         }
       }
     }
+    
+    // -----------------------------------------------------------------------
+    // DEDUPLICATION: Remove duplicate listings by normalized title to prevent
+    // the same product appearing twice when Tier 1 + Tier 2 overlap.
+    // -----------------------------------------------------------------------
+    if (rawResults.length > 1) {
+      const seenTitles = new Set<string>();
+      rawResults = rawResults.filter(item => {
+        if (!item.title) return true;
+        const normalized = item.title.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+        if (seenTitles.has(normalized)) return false;
+        seenTitles.add(normalized);
+        return true;
+      });
+    }
 
-    // -----------------------------------------------------------------------
-    // Run through relevance scoring + IQR statistical filtering pipeline
-    // -----------------------------------------------------------------------
+
     if (rawResults.length > 0) {
       const result = processMarketListings(rawResults, input, chosenQuery);
       if (result.success) {

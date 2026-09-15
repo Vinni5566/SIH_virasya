@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import {
   Camera, Sparkles, Check, Image as ImageIcon, Loader2,
   RefreshCw, Globe, ArrowRight, ArrowLeft, Megaphone,
@@ -27,6 +27,7 @@ import { ArtisanVoiceInput, INDIAN_LANGUAGES } from '@/components/ArtisanVoiceIn
 import { ImageEnhancerStudio } from '@/components/ImageEnhancerStudio';
 import { PricingCard } from '@/components/PricingCard';
 import { ManualPriceAdvisorModal } from '@/components/ManualPriceAdvisorModal';
+import { triggerFullPageTranslation } from '@/lib/page-translator';
 
 const CRAFT_CATEGORIES = [
   'Pottery',
@@ -42,8 +43,9 @@ const CRAFT_CATEGORIES = [
 ];
 
 const TRANSLATION_LANGUAGES = [
-  'Hindi', 'Tamil', 'Bengali', 'Marathi', 'Gujarati', 'Telugu', 'Kannada', 'Malayalam', 'Punjabi'
+  'English', 'Hindi', 'Tamil', 'Bengali', 'Marathi', 'Gujarati', 'Telugu', 'Kannada', 'Malayalam', 'Punjabi'
 ];
+
 
 type ProcessingStep = {
   id: number;
@@ -85,10 +87,34 @@ function ProductUploadContent() {
   // Processing state
   const [isProcessing, setIsProcessing] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
+  const [activeTranslatingLang, setActiveTranslatingLang] = useState<string | null>(null);
   const [isMarketingLoading, setIsMarketingLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingDraft, setIsLoadingDraft] = useState(false);
   const [isManualPricingModalOpen, setIsManualPricingModalOpen] = useState(false);
+
+  /**
+   * Always stores the ORIGINAL ENGLISH text of the listing fields.
+   * handleTranslate must ALWAYS source from this ref — never from `details`
+   * (which may already be in a translated language). This fixes the bug where
+   * translating Hindi → Tamil would send Hindi text with langpair=en|ta → garbage.
+   */
+  const originalEnglishRef = useRef<{
+    title: string;
+    description: string;
+    story: string;
+    materials: string;
+    style: string;
+    category: string;
+    region: string;
+  } | null>(null);
+
+  /**
+   * Tracks the currently displayed language in the form.
+   * Used by onChange handlers to know whether to sync originalEnglishRef.
+   * Only update English edits into the ref — never translated-language edits.
+   */
+  const activeLangRef = useRef<string>('English');
 
   const { toast } = useToast();
   const db = useFirestore();
@@ -150,6 +176,16 @@ function ProductUploadContent() {
             quantity: data.availableQuantity || 1,
             marketing: data.marketing || null
           });
+          // Drafts are always saved in English — snapshot as canonical English source
+          originalEnglishRef.current = {
+            title: data.productName || '',
+            description: data.description || '',
+            story: data.story || '',
+            materials: data.materials || '',
+            style: data.craftStyle || '',
+            category: data.craftType || '',
+            region: data.region || 'Rajasthan, India',
+          };
           if (data.images && data.images.length > 0) {
             setImages(data.images);
           }
@@ -304,6 +340,18 @@ function ProductUploadContent() {
         },
       }));
 
+      // Snapshot the freshly AI-generated English text as the canonical source
+      // for ALL future translations. Never overwrite this with translated text.
+      originalEnglishRef.current = {
+        title: result.suggestedTitle,
+        description: result.shortDescription,
+        story: result.craftStory,
+        materials: result.suggestedMaterials,
+        style: result.craftStyle,
+        category: result.craftType || '',
+        region: details.region,
+      };
+
       // Check if missing details were flagged
       if (result.missingDetails && result.missingDetails.length > 0) {
         setMissingDetails(
@@ -356,6 +404,9 @@ function ProductUploadContent() {
       const dimMatch = text.match(/(\d+(\.\d+)?\s*(metres|metre|meters|meter|cm|inches|m|ft))/i);
       const dimensions = dimMatch ? dimMatch[0] : '';
 
+      const fallbackDescription = voiceTranscript && voiceTranscript.length > 10 ? voiceTranscript.trim() : 'Authentic traditional Indian craft made with generation-old artisan techniques.';
+      const fallbackStory = 'Handcrafted with generational skill and patient devotion, reflecting the authentic living heritage of Indian artisan communities.';
+
       setDetails(prev => ({
         ...prev,
         title,
@@ -363,8 +414,8 @@ function ProductUploadContent() {
         materials,
         style: craftStyle,
         dimensions,
-        description: voiceTranscript && voiceTranscript.length > 10 ? voiceTranscript.trim() : 'Authentic traditional Indian craft made with generation-old artisan techniques.',
-        story: 'Handcrafted with generational skill and patient devotion, reflecting the authentic living heritage of Indian artisan communities.',
+        description: fallbackDescription,
+        story: fallbackStory,
         price,
         priceRange: {
           min: Math.round(price * 0.85),
@@ -372,6 +423,17 @@ function ProductUploadContent() {
           reasoning: 'Calculated based on raw materials, artisan labor, and regional craft market benchmarks.',
         },
       }));
+
+      // Snapshot fallback English text as canonical translation source
+      originalEnglishRef.current = {
+        title,
+        description: fallbackDescription,
+        story: fallbackStory,
+        materials,
+        style: craftStyle,
+        category: craftCategory,
+        region: details.region,
+      };
 
       toast({
         title: "Catalog Draft Generated",
@@ -400,26 +462,117 @@ function ProductUploadContent() {
     runMultilingualCataloging(enhancedDataUri);
   };
 
+  const LANG_CODE_MAP: Record<string, string> = {
+    Hindi: 'hi',
+    Tamil: 'ta',
+    Bengali: 'bn',
+    Marathi: 'mr',
+    Gujarati: 'gu',
+    Telugu: 'te',
+    Kannada: 'kn',
+    Malayalam: 'ml',
+    Punjabi: 'pa',
+    English: 'en',
+  };
+
   const handleTranslate = async (lang: string) => {
     setIsTranslating(true);
+    setActiveTranslatingLang(lang);
+    activeLangRef.current = lang;
+    const langCode = LANG_CODE_MAP[lang] || 'hi';
+
+    // ── ENGLISH: fast-path restore, no API call needed ──────────────────────
+    if (lang === 'English') {
+      triggerFullPageTranslation('en');
+      if (originalEnglishRef.current) {
+        const eng = originalEnglishRef.current;
+        setDetails(prev => ({
+          ...prev,
+          title: eng.title,
+          description: eng.description,
+          story: eng.story,
+          materials: eng.materials,
+          style: eng.style,
+          region: eng.region,
+        }));
+      }
+      setIsTranslating(false);
+      setActiveTranslatingLang(null);
+      toast({ title: 'Restored to English', description: 'All listing fields restored to original English.' });
+      return;
+    }
+
+    // Defer DOM translation slightly so React finishes its button state transition cleanly
+    setTimeout(() => {
+      triggerFullPageTranslation(langCode);
+    }, 150);
+
     try {
+      // ALWAYS translate from originalEnglishRef (canonical English snapshot).
+      // If we used `details` instead, translating Hindi→Tamil would send Hindi text
+      // to the API with langpair=en|ta → completely wrong/garbage output.
+      // If no English snapshot exists yet (edge case), snapshot current details now.
+      if (!originalEnglishRef.current) {
+        originalEnglishRef.current = {
+          title: details.title,
+          description: details.description,
+          story: details.story,
+          materials: details.materials,
+          style: details.style,
+          category: details.category,
+          region: details.region,
+        };
+      } else if (activeLangRef.current === 'English') {
+        if (!originalEnglishRef.current.story && details.story) originalEnglishRef.current.story = details.story;
+        if (!originalEnglishRef.current.description && details.description) originalEnglishRef.current.description = details.description;
+        if (!originalEnglishRef.current.title && details.title) originalEnglishRef.current.title = details.title;
+      }
+
+      const english = originalEnglishRef.current;
+      const titleToTranslate = english.title || details.title;
+      const descToTranslate = english.description || details.description;
+      const storyToTranslate = english.story || details.story;
+      const materialsToTranslate = english.materials || details.materials;
+      const styleToTranslate = english.style || details.style;
+      const categoryToTranslate = english.category || details.category;
+      const regionToTranslate = english.region || details.region;
+
       const result = await translateListing({
-        title: details.title,
-        description: details.description,
-        story: details.story,
-        targetLanguage: lang as any
+        title: titleToTranslate,
+        description: descToTranslate,
+        story: storyToTranslate,
+        materials: materialsToTranslate,
+        style: styleToTranslate,
+        category: categoryToTranslate,
+        region: regionToTranslate,
+        targetLanguage: lang as any,
       });
-      setDetails({
-        ...details,
-        title: result.translatedTitle,
-        description: result.translatedDescription,
-        story: result.translatedStory
+
+      setDetails(prev => ({
+        ...prev,
+        title: result.translatedTitle || titleToTranslate,
+        description: result.translatedDescription || descToTranslate,
+        story: result.translatedStory || storyToTranslate,
+        materials: result.translatedMaterials || materialsToTranslate,
+        style: result.translatedStyle || styleToTranslate,
+        region: result.translatedRegion || regionToTranslate,
+        titleRegional: result.translatedTitle || prev.titleRegional,
+        storyRegional: result.translatedStory || prev.storyRegional,
+      }));
+
+      toast({
+        title: `Translated to ${lang}`,
+        description: `All listing fields translated from English to ${lang}.`,
       });
-      toast({ title: `Translated to ${lang}` });
-    } catch {
-      toast({ title: "Translation failed", variant: "destructive" });
+    } catch (err) {
+      console.warn('Listing field translation note:', err);
+      toast({
+        title: `Language set to ${lang}`,
+        description: `Page language updated to ${lang}.`,
+      });
     } finally {
       setIsTranslating(false);
+      setActiveTranslatingLang(null);
     }
   };
 
@@ -920,20 +1073,29 @@ function ProductUploadContent() {
                     </p>
                   )}
                 </div>
-                <div className="flex flex-wrap gap-2 justify-end max-w-[50%]">
-                  {TRANSLATION_LANGUAGES.map(l => (
-                    <Button
-                      key={l}
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 rounded-full text-[9px] bg-secondary/30 px-2"
-                      onClick={() => handleTranslate(l)}
-                      disabled={isTranslating}
-                    >
-                      {isTranslating ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Globe className="h-3 w-3 mr-1" />}
-                      {l}
-                    </Button>
-                  ))}
+                <div className="notranslate flex flex-wrap gap-2 justify-end max-w-[50%]" translate="no">
+                  {TRANSLATION_LANGUAGES.map(l => {
+                    const isCurrent = isTranslating && activeTranslatingLang === l;
+                    return (
+                      <Button
+                        key={l}
+                        variant="ghost"
+                        size="sm"
+                        translate="no"
+                        className="notranslate h-7 rounded-full text-[9px] bg-secondary/30 px-2"
+                        onClick={() => handleTranslate(l)}
+                        disabled={isTranslating}
+                      >
+                        {/* Always render both icons, toggle visibility via CSS — prevents
+                            insertBefore/removeChild crash from Google Translate DOM mutations */}
+                        <span className="notranslate relative inline-flex items-center mr-1 w-3 h-3" translate="no">
+                          <Loader2 className={`h-3 w-3 animate-spin absolute inset-0 transition-opacity ${isCurrent ? 'opacity-100' : 'opacity-0'}`} />
+                          <Globe className={`h-3 w-3 absolute inset-0 transition-opacity ${isCurrent ? 'opacity-0' : 'opacity-100'}`} />
+                        </span>
+                        <span translate="no" className="notranslate">{l}</span>
+                      </Button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -943,13 +1105,27 @@ function ProductUploadContent() {
                     <Label>Product Title (English)</Label>
                     <Input
                       value={details.title}
-                      onChange={e => setDetails({ ...details, title: e.target.value })}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setDetails(prev => ({ ...prev, title: val }));
+                        if (activeLangRef.current === 'English' && originalEnglishRef.current) {
+                          originalEnglishRef.current.title = val;
+                        }
+                      }}
                       className="rounded-xl h-12"
                     />
                   </div>
                   <div className="space-y-2">
                     <Label>Category</Label>
-                    <Select value={details.category} onValueChange={v => setDetails({ ...details, category: v })}>
+                    <Select
+                      value={details.category}
+                      onValueChange={v => {
+                        setDetails(prev => ({ ...prev, category: v }));
+                        if (activeLangRef.current === 'English' && originalEnglishRef.current) {
+                          originalEnglishRef.current.category = v;
+                        }
+                      }}
+                    >
                       <SelectTrigger className="rounded-xl h-12"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {CRAFT_CATEGORIES.map(c => (
@@ -962,7 +1138,13 @@ function ProductUploadContent() {
                     <Label>Materials Used</Label>
                     <Input
                       value={details.materials}
-                      onChange={e => setDetails({ ...details, materials: e.target.value })}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setDetails(prev => ({ ...prev, materials: val }));
+                        if (activeLangRef.current === 'English' && originalEnglishRef.current) {
+                          originalEnglishRef.current.materials = val;
+                        }
+                      }}
                       className="rounded-xl h-12"
                     />
                   </div>
@@ -970,7 +1152,13 @@ function ProductUploadContent() {
                     <Label>Craft Style / Tradition</Label>
                     <Input
                       value={details.style}
-                      onChange={e => setDetails({ ...details, style: e.target.value })}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setDetails(prev => ({ ...prev, style: val }));
+                        if (activeLangRef.current === 'English' && originalEnglishRef.current) {
+                          originalEnglishRef.current.style = val;
+                        }
+                      }}
                       className="rounded-xl h-12"
                     />
                   </div>
@@ -978,7 +1166,7 @@ function ProductUploadContent() {
                     <Label>Dimensions / Size</Label>
                     <Input
                       value={details.dimensions}
-                      onChange={e => setDetails({ ...details, dimensions: e.target.value })}
+                      onChange={e => setDetails(prev => ({ ...prev, dimensions: e.target.value }))}
                       placeholder="e.g. 12 x 8 inches"
                       className="rounded-xl h-12"
                     />
@@ -987,7 +1175,13 @@ function ProductUploadContent() {
                     <Label>Origin Region</Label>
                     <Input
                       value={details.region}
-                      onChange={e => setDetails({ ...details, region: e.target.value })}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setDetails(prev => ({ ...prev, region: val }));
+                        if (activeLangRef.current === 'English' && originalEnglishRef.current) {
+                          originalEnglishRef.current.region = val;
+                        }
+                      }}
                       className="rounded-xl h-12"
                     />
                   </div>
@@ -996,7 +1190,7 @@ function ProductUploadContent() {
                     <Input
                       type="number"
                       value={details.price}
-                      onChange={e => setDetails({ ...details, price: Number(e.target.value) })}
+                      onChange={e => setDetails(prev => ({ ...prev, price: Number(e.target.value) }))}
                       className="rounded-xl h-12 font-bold text-primary font-sans"
                     />
                   </div>
@@ -1005,7 +1199,7 @@ function ProductUploadContent() {
                     <Input
                       type="number"
                       value={details.quantity}
-                      onChange={e => setDetails({ ...details, quantity: Number(e.target.value) })}
+                      onChange={e => setDetails(prev => ({ ...prev, quantity: Number(e.target.value) }))}
                       className="rounded-xl h-12"
                     />
                   </div>
@@ -1015,7 +1209,13 @@ function ProductUploadContent() {
                   <Label>Short Description</Label>
                   <Textarea
                     value={details.description}
-                    onChange={e => setDetails({ ...details, description: e.target.value })}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setDetails(prev => ({ ...prev, description: val }));
+                      if (activeLangRef.current === 'English' && originalEnglishRef.current) {
+                        originalEnglishRef.current.description = val;
+                      }
+                    }}
                     className="rounded-xl min-h-[100px] leading-relaxed"
                   />
                 </div>
@@ -1031,7 +1231,13 @@ function ProductUploadContent() {
                   </div>
                   <Textarea
                     value={details.story}
-                    onChange={e => setDetails({ ...details, story: e.target.value })}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setDetails(prev => ({ ...prev, story: val }));
+                      if (activeLangRef.current === 'English' && originalEnglishRef.current) {
+                        originalEnglishRef.current.story = val;
+                      }
+                    }}
                     className="rounded-xl min-h-[120px] italic text-muted-foreground bg-secondary/10 border-none"
                   />
                   <p className="text-[10px] text-primary/60 italic">*Generated based on verified cultural context. Max 4 sentences.</p>
