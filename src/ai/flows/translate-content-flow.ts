@@ -315,3 +315,52 @@ export async function translateListing(input: TranslationInput): Promise<Transla
   // 100% reliable, culturally authentic neural translation engine (zero crashes, instant)
   return fallbackNeuralTranslate(input);
 }
+
+export interface MarketingContentData {
+  instagram: string;
+  whatsapp: string;
+  promoLine: string;
+  hashtags: string[];
+}
+
+/**
+ * Translates generated marketing copy (Instagram, WhatsApp, Promo Line) into any of the 10 supported regional Indian languages.
+ * Guaranteed zero-failure with concurrent translation and original text fallback.
+ */
+export async function translateMarketingContent(
+  marketing: MarketingContentData,
+  targetLanguage: string
+): Promise<MarketingContentData> {
+  const langCode = LANGUAGE_CODE_MAP[targetLanguage] || 'hi';
+  if (!marketing || langCode === 'en') {
+    return {
+      instagram: marketing?.instagram || '',
+      whatsapp: marketing?.whatsapp || '',
+      promoLine: marketing?.promoLine || '',
+      hashtags: marketing?.hashtags || [],
+    };
+  }
+
+  try {
+    const [translatedInsta, translatedWp, translatedPromo] = await Promise.all([
+      marketing.instagram ? translateTextChunk(marketing.instagram, langCode) : Promise.resolve(''),
+      marketing.whatsapp ? translateTextChunk(marketing.whatsapp, langCode) : Promise.resolve(''),
+      marketing.promoLine ? translateTextChunk(marketing.promoLine, langCode) : Promise.resolve(''),
+    ]);
+
+    return {
+      instagram: translatedInsta || marketing.instagram,
+      whatsapp: translatedWp || marketing.whatsapp,
+      promoLine: translatedPromo || marketing.promoLine,
+      hashtags: marketing.hashtags || [],
+    };
+  } catch (err) {
+    console.warn('Marketing translation note:', err);
+    return {
+      instagram: marketing.instagram,
+      whatsapp: marketing.whatsapp,
+      promoLine: marketing.promoLine,
+      hashtags: marketing.hashtags || [],
+    };
+  }
+}
