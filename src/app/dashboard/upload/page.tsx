@@ -692,8 +692,7 @@ function ProductUploadContent() {
         status: status,
         updatedAt: serverTimestamp(),
         marketing: details.marketing || null,
-        priceRange: details.priceRange,
-        listingLanguage: activeLangRef.current || 'English',
+        priceRange: details.priceRange
       };
 
       if (editId) {

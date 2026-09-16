@@ -80,17 +80,11 @@ export default function ArtisanDashboard() {
     setIsMarketingLoading(true);
     setMarketingProduct(product);
     try {
-      // Priority: 1) listingLanguage stored on the product at creation time
-      //           2) auto-detect from the product's text (Devanagari, Tamil script, etc.)
-      //           3) English fallback
-      const storedLang: string | undefined = product.listingLanguage || undefined;
-
       const result = await generateMarketingContent({
         productName: product.productName,
         craftType: product.craftType,
         region: product.region,
         description: product.description,
-        targetLanguage: storedLang,
       });
       setMarketingResult(result);
     } catch (error) {
