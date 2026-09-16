@@ -53,6 +53,24 @@ Requirements:
 Tone: Warm, authentic, premium, heritage-focused.`,
 });
 
+/**
+ * Detects Indian regional script from text if targetLanguage wasn't explicitly supplied.
+ * Ensures that Hindi/Marathi/Tamil/Bengali products generate 100% in their native language
+ * instead of returning half-English, half-regional output.
+ */
+function detectLanguageFromText(text?: string): string | null {
+  if (!text) return null;
+  if (/[\u0B80-\u0BFF]/.test(text)) return 'Tamil';
+  if (/[\u0980-\u09FF]/.test(text)) return 'Bengali';
+  if (/[\u0A80-\u0AFF]/.test(text)) return 'Gujarati';
+  if (/[\u0C00-\u0C7F]/.test(text)) return 'Telugu';
+  if (/[\u0C80-\u0CFF]/.test(text)) return 'Kannada';
+  if (/[\u0D00-\u0D7F]/.test(text)) return 'Malayalam';
+  if (/[\u0A00-\u0A7F]/.test(text)) return 'Punjabi';
+  if (/[\u0900-\u097F]/.test(text)) return 'Hindi';
+  return null;
+}
+
 const marketingGeneratorFlow = ai.defineFlow(
   {
     name: 'marketingGeneratorFlow',
@@ -60,12 +78,15 @@ const marketingGeneratorFlow = ai.defineFlow(
     outputSchema: MarketingOutputSchema,
   },
   async input => {
-    const targetLang = input.targetLanguage || 'English';
+    // Automatically detect language from product text if not explicitly provided
+    const detectedLang = detectLanguageFromText(`${input.productName} ${input.description} ${input.region}`);
+    const targetLang = input.targetLanguage || detectedLang || 'English';
+    const effectiveInput = { ...input, targetLanguage: targetLang };
 
     // 1. Try Genkit AI prompt if API key is configured
     if (process.env.GEMINI_API_KEY && !process.env.GEMINI_API_KEY.startsWith('AQ.')) {
       try {
-        const { output } = await marketingPrompt(input);
+        const { output } = await marketingPrompt(effectiveInput);
         if (output && output.instagram && output.whatsapp) {
           return output;
         }
@@ -74,12 +95,14 @@ const marketingGeneratorFlow = ai.defineFlow(
       }
     }
 
-    // 2. Base Template fallback (English baseline)
-    const craft = input.craftType || 'handcraft';
+    // 2. Base Template fallback
+    const rawCraft = (input.craftType || '').trim();
+    const craft = (rawCraft && rawCraft.toLowerCase() !== 'other') ? rawCraft : 'traditional handcraft';
     const region = input.region || 'India';
     const name = input.productName || 'Artisan Piece';
-    const regionSlug = region.split(',')[0].trim().replace(/\s+/g, '');
-    const craftSlug = craft.replace(/\s+/g, '');
+    const regionSlug = region.split(',')[0].trim().replace(/[\s/]+/g, '');
+    const craftSlug = craft.replace(/[\s/]+/g, '');
+
     const baseContent = {
       instagram: `✨ Meet *${name}* — a stunning ${craft} from ${region}! 🇮🇳 Every stitch, every curve carries centuries of heritage. Now available on Virasya. Shop authentic India. 🛍️`,
       whatsapp: `🎨 *Introducing: ${name}*\n\nThis exquisite piece of ${craft} from ${region} is a living tribute to India's rich artisan heritage. Crafted by master artisans using time-honoured techniques passed down through generations, each piece is one-of-a-kind.\n\n✅ 100% Authentic & Handmade\n✅ Directly from the artisan\n✅ Fair-trade pricing\n\n🛍️ Explore & purchase on *Virasya* — India's trusted platform for authentic handcrafted art.\n\n📦 Fast delivery | 🔒 Secure payment`,
@@ -89,12 +112,12 @@ const marketingGeneratorFlow = ai.defineFlow(
         '#Virasya',
         '#ArtisanMade',
         '#HeritageArt',
-        `#${craftSlug}`,
+        craftSlug && craftSlug.toLowerCase() !== 'traditionalhandcraft' ? `#${craftSlug}` : '#HeritageCraft',
         `#${regionSlug}Craft`,
         '#SupportArtisans',
         '#EthicalLiving',
         '#AuthenticIndia',
-      ],
+      ].filter(Boolean),
       promoLine: `Own a piece of India's living heritage — ${name}.`,
     };
 
