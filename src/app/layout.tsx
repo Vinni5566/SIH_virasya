@@ -27,6 +27,29 @@ export default function RootLayout({
           <Toaster />
         </FirebaseClientProvider>
 
+        {/* Fix Google Translate removeChild / insertBefore NotFoundError DOM mutation crash */}
+        <Script id="google-translate-dom-patch" strategy="beforeInteractive">
+          {`
+            if (typeof Node === 'function' && Node.prototype) {
+              var origRemoveChild = Node.prototype.removeChild;
+              Node.prototype.removeChild = function(child) {
+                if (child.parentNode !== this) {
+                  return child;
+                }
+                return origRemoveChild.apply(this, arguments);
+              };
+
+              var origInsertBefore = Node.prototype.insertBefore;
+              Node.prototype.insertBefore = function(newNode, referenceNode) {
+                if (referenceNode && referenceNode.parentNode !== this) {
+                  return newNode;
+                }
+                return origInsertBefore.apply(this, arguments);
+              };
+            }
+          `}
+        </Script>
+
         {/* Google Translate Hidden Element */}
         <div id="google_translate_element" style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', zIndex: -100 }}></div>
 
