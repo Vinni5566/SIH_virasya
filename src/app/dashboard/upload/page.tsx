@@ -15,7 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { artisanAITypeDetection } from '@/ai/flows/artisan-ai-type-detection';
 import { multilingualAutoCatalog } from '@/ai/flows/multilingual-auto-cataloger';
-import { translateListing, translateMarketingContent } from '@/ai/flows/translate-content-flow';
+import { translateListing } from '@/ai/flows/translate-content-flow';
 import { generateMarketingContent } from '@/ai/flows/artisan-ai-marketing-generator';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
@@ -111,17 +111,6 @@ function ProductUploadContent() {
   } | null>(null);
 
   /**
-   * Stores canonical English marketing content (Instagram, WhatsApp, Promo Line, Hashtags).
-   * Used to restore when switching back to English or translating into regional languages.
-   */
-  const originalEnglishMarketingRef = useRef<{
-    instagram: string;
-    whatsapp: string;
-    promoLine: string;
-    hashtags?: string[];
-  } | null>(null);
-
-  /**
    * Tracks the currently displayed language in the form.
    * Used by onChange handlers to know whether to sync originalEnglishRef.
    * Only update English edits into the ref — never translated-language edits.
@@ -188,9 +177,6 @@ function ProductUploadContent() {
             quantity: data.availableQuantity || 1,
             marketing: data.marketing || null
           });
-          if (data.marketing) {
-            originalEnglishMarketingRef.current = data.marketing;
-          }
           // Drafts are always saved in English — snapshot as canonical English source
           originalEnglishRef.current = {
             title: data.productName || '',
@@ -285,9 +271,9 @@ function ProductUploadContent() {
     }
   };
 
-  // Ensure image payload is compact before transmitting over Firestore & Server Actions
-  const ensureOptimizedDataUri = (dataUri: string, maxDim = 800, quality = 0.7): Promise<string> => {
-    if (!dataUri) return Promise.resolve('');
+  // Ensure image payload is compact before transmitting over Server Action
+  const ensureOptimizedDataUri = (dataUri: string, maxDim = 1200, quality = 0.8): Promise<string> => {
+    if (!dataUri || dataUri.length < 300000) return Promise.resolve(dataUri);
     return new Promise((resolve) => {
       const img = new Image();
       img.onload = () => {
@@ -514,7 +500,6 @@ function ProductUploadContent() {
           style: eng.style,
           region: eng.region,
           dimensions: eng.dimensions,
-          marketing: originalEnglishMarketingRef.current || prev.marketing,
         }));
       }
       setIsTranslating(false);
@@ -554,11 +539,6 @@ function ProductUploadContent() {
         if (details.dimensions) originalEnglishRef.current.dimensions = details.dimensions;
       }
 
-      // Snapshot English marketing content if currently in English
-      if (details.marketing && previousLang === 'English' && !originalEnglishMarketingRef.current) {
-        originalEnglishMarketingRef.current = details.marketing;
-      }
-
       const english = originalEnglishRef.current;
       const titleToTranslate = english.title || details.title;
       const descToTranslate = english.description || details.description;
@@ -569,29 +549,17 @@ function ProductUploadContent() {
       const regionToTranslate = english.region || details.region;
       const dimensionsToTranslate = english.dimensions || details.dimensions;
 
-      // Translate listing fields and marketing content concurrently
-      const [result, translatedMarketing] = await Promise.all([
-        translateListing({
-          title: titleToTranslate,
-          description: descToTranslate,
-          story: storyToTranslate,
-          materials: materialsToTranslate,
-          style: styleToTranslate,
-          category: categoryToTranslate,
-          region: regionToTranslate,
-          dimensions: dimensionsToTranslate,
-          targetLanguage: lang as any,
-        }),
-        details.marketing
-          ? translateMarketingContent(
-              originalEnglishMarketingRef.current || details.marketing,
-              lang
-            ).catch(err => {
-              console.warn('Marketing translation note:', err);
-              return details.marketing;
-            })
-          : Promise.resolve(null),
-      ]);
+      const result = await translateListing({
+        title: titleToTranslate,
+        description: descToTranslate,
+        story: storyToTranslate,
+        materials: materialsToTranslate,
+        style: styleToTranslate,
+        category: categoryToTranslate,
+        region: regionToTranslate,
+        dimensions: dimensionsToTranslate,
+        targetLanguage: lang as any,
+      });
 
       setDetails(prev => ({
         ...prev,
@@ -604,12 +572,11 @@ function ProductUploadContent() {
         dimensions: result.translatedDimensions || dimensionsToTranslate,
         titleRegional: result.translatedTitle || prev.titleRegional,
         storyRegional: result.translatedStory || prev.storyRegional,
-        marketing: translatedMarketing || prev.marketing,
       }));
 
       toast({
         title: `Translated to ${lang}`,
-        description: `All listing fields and marketing content translated to ${lang}.`,
+        description: `All listing fields translated from English to ${lang}.`,
       });
     } catch (err) {
       console.warn('Listing field translation note:', err);
@@ -626,26 +593,14 @@ function ProductUploadContent() {
   const handleGenerateMarketing = async () => {
     setIsMarketingLoading(true);
     try {
-      const currentLang = activeLangRef.current || 'English';
-      const english = originalEnglishRef.current;
       const result = await generateMarketingContent({
-        productName: details.title || english?.title || 'Handcrafted Craft',
-        craftType: details.category || english?.category || 'Handicraft',
-        region: details.region || english?.region || 'India',
-        description: details.description || english?.description || '',
-        targetLanguage: currentLang,
+        productName: details.title,
+        craftType: details.category,
+        region: details.region,
+        description: details.description
       });
-
-      // If generated while in English, cache as canonical English marketing source
-      if (currentLang === 'English') {
-        originalEnglishMarketingRef.current = result;
-      }
-
-      setDetails(prev => ({ ...prev, marketing: result }));
-      toast({
-        title: "Marketing posts generated!",
-        description: `Promotional content generated in ${currentLang}.`,
-      });
+      setDetails({ ...details, marketing: result });
+      toast({ title: "Marketing posts generated!" });
     } catch {
       toast({ title: "Generation failed", variant: "destructive" });
     } finally {
@@ -667,10 +622,9 @@ function ProductUploadContent() {
     if (!db) return;
     setIsSaving(true);
     try {
-      // Limit cloud document payload to top 3 images to prevent Firestore bandwidth exhaustion
-      const rawImages = images.length > 0 ? images.slice(0, 3) : (primaryImage ? [primaryImage] : []);
+      const rawImages = images.length > 0 ? images : (primaryImage ? [primaryImage] : []);
       const optimizedImages = await Promise.all(
-        rawImages.map((img: string) => ensureOptimizedDataUri(img, 700, 0.65))
+        rawImages.map((img: string) => ensureOptimizedDataUri(img, 900, 0.75))
       );
 
       const productData: any = {
@@ -1116,51 +1070,13 @@ function ProductUploadContent() {
             {/* Marketing Generator CTA */}
             <Button
               variant="outline"
-              className="w-full rounded-full h-12 gap-2 border-2 hover:bg-primary/5 relative"
+              className="w-full rounded-full h-12 gap-2 border-2 hover:bg-primary/5"
               onClick={handleGenerateMarketing}
               disabled={isMarketingLoading}
             >
-              <span className="notranslate relative inline-flex items-center w-4 h-4 mr-1" translate="no">
-                <Loader2 className={`h-4 w-4 animate-spin absolute inset-0 transition-opacity ${isMarketingLoading ? 'opacity-100' : 'opacity-0'}`} />
-                <Megaphone className={`h-4 w-4 absolute inset-0 transition-opacity ${isMarketingLoading ? 'opacity-0' : 'opacity-100'}`} />
-              </span>
-              <span>{details.marketing ? "Regenerate Marketing Content" : "Generate Marketing Content"}</span>
+              {isMarketingLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Megaphone className="h-4 w-4" />}
+              Generate Marketing Content
             </Button>
-
-            {/* Generated Marketing Content Preview Card */}
-            {details.marketing && (
-              <Card className="border-none shadow-sm rounded-3xl bg-secondary/20 p-5 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-headline font-bold text-sm text-primary flex items-center gap-1.5">
-                    <Megaphone className="h-4 w-4" /> Marketing Copy ({activeLangRef.current || 'English'})
-                  </h4>
-                  <Badge variant="secondary" className="text-[10px] bg-white/60 font-semibold">Active</Badge>
-                </div>
-                <div className="space-y-3 text-xs">
-                  <div>
-                    <span className="font-bold text-primary uppercase text-[10px] tracking-wider block mb-1">Instagram Caption</span>
-                    <p className="bg-white/70 p-3 rounded-xl italic leading-relaxed text-foreground/90">{details.marketing.instagram}</p>
-                    {details.marketing.hashtags?.length > 0 && (
-                      <div className="mt-1.5 flex flex-wrap gap-1">
-                        {details.marketing.hashtags.slice(0, 8).map((tag: string) => (
-                          <span key={tag} className="text-primary font-semibold text-[10px]">{tag}</span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <span className="font-bold text-primary uppercase text-[10px] tracking-wider block mb-1">WhatsApp Message</span>
-                    <p className="bg-white/70 p-3 rounded-xl leading-relaxed text-foreground/90 max-h-32 overflow-y-auto whitespace-pre-line">{details.marketing.whatsapp}</p>
-                  </div>
-                  {details.marketing.promoLine && (
-                    <div className="bg-primary/5 p-2.5 rounded-xl border border-primary/10">
-                      <span className="font-bold text-primary uppercase text-[9px] tracking-wider block mb-0.5">Catchy Promo Line</span>
-                      <p className="font-medium text-xs text-foreground/90">"{details.marketing.promoLine}"</p>
-                    </div>
-                  )}
-                </div>
-              </Card>
-            )}
           </div>
 
           <div className="lg:col-span-2 space-y-6">
@@ -1455,43 +1371,6 @@ function ProductUploadContent() {
               </div>
             </div>
           </div>
-
-          {/* Marketing Content in Final Preview */}
-          {details.marketing && (
-            <Card className="border-none shadow-sm rounded-[40px] bg-secondary/20 p-8">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-headline font-bold flex items-center gap-2 text-primary">
-                  <Megaphone className="h-5 w-5" /> Generated Marketing Content ({activeLangRef.current || 'English'})
-                </h3>
-                <Badge variant="outline" className="border-primary/20 rounded-full">Ready to Share</Badge>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-3">
-                  <Label className="text-xs font-bold uppercase tracking-widest text-primary">Instagram Post</Label>
-                  <div className="bg-white/60 p-5 rounded-2xl italic text-sm leading-relaxed border border-white">
-                    {details.marketing.instagram}
-                    {details.marketing.hashtags?.length > 0 && (
-                      <div className="mt-3 flex flex-wrap gap-1.5">
-                        {details.marketing.hashtags.map((tag: string) => (
-                          <span key={tag} className="text-primary font-bold text-xs">{tag}</span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div className="space-y-3">
-                  <Label className="text-xs font-bold uppercase tracking-widest text-primary">WhatsApp Message</Label>
-                  <p className="text-sm bg-white/60 p-5 rounded-2xl leading-relaxed border border-white whitespace-pre-line">{details.marketing.whatsapp}</p>
-                  {details.marketing.promoLine && (
-                    <div className="bg-primary/10 p-3.5 rounded-xl border border-primary/10">
-                      <p className="text-[10px] font-bold uppercase text-primary mb-0.5">Promo Line</p>
-                      <p className="text-sm font-semibold">"{details.marketing.promoLine}"</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </Card>
-          )}
         </div>
       )}
 
